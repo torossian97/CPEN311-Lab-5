@@ -271,7 +271,7 @@ assign VGA_CLK=video_clk_40Mhz;
 assign VGA_SYNC_N=1'b1 & SW[1];
 
 logic lfsr_clk;
-logic [4:0]LFSR;
+logic [4:0] LFSR;
 logic [31:0] dds_increment;
 
 /// NIOS II Qsys
@@ -334,8 +334,7 @@ DE1_SoC_QSYS U0(
 (* keep = 1, preserve = 1 *) logic [11:0] actual_selected_modulation;
 (* keep = 1, preserve = 1 *) logic [11:0] actual_selected_signal;
 
-//// LAB 5 - WRITE
-// Clock Divider 
+// Clock Divider to 1Hz
 clk_divider one_hz(	.inclk(CLOCK_50),
 							.div_clk_count(32'h2FAF080), //50M
 							.Reset(1'b0),
@@ -349,23 +348,54 @@ LFSR_module LFSR_1(
 				.lfsr(LFSR)
 				);
 
-
+//wave signals
 logic [11:0] sin_out;
 logic [11:0] sin_out_11;
 logic [11:0] cos_out;
 logic [11:0] square_out;
 logic [11:0] saw_out;
 
-waveform_gen part_8(
-						 .clk(CLOCK_50),
-						 .reset(SW[8]),
-						 .en(SW[7]),
-						 .phase_inc(32'd258),	// 258 = ((3Hz * 2^32)/50M) + 0.5
-						 .sin_out(sin_out),
-						 .cos_out(cos_out),
-						 .squ_out(square_out),
-						 .saw_out(saw_out)
-						 );
+//connecting signals
+logic [11:0] mod_wave;
+logic [11:0] sel_wave;
+logic [4:0] LFSR_2;
+
+waveform_gen part8(.clk(CLOCK_50),
+				 .reset(SW[8]),
+				 .en(SW[7]),
+				 .phase_inc(32'd258),	// 258 = (3Hz * 2^32)/50M + 0.5
+				 .sin_out(sin_out),
+				 .cos_out(cos_out),
+				 .squ_out(square_out),
+				 .saw_out(saw_out)
+				 );
+				 
+				 // Slow to Fast - LFSR is 1Hz to 50MHz in selector
+domain_conv sf1(.slowclk(lfsr_clk), .fastclk(CLOCK_50), .data(LFSR), .d_out(LFSR_2));
+
+waveform_gen part11(.clk(CLOCK_50),
+				 .reset(SW[8]),
+				 .en(SW[7]),
+				 .phase_inc(dds_increment),	// 258 = (3Hz * 2^32)/50M + 0.5
+				 .sin_out(sin_out_11),
+				 .cos_out(),
+				 .squ_out(),
+				 .saw_out()
+				 );
+						 
+domain_conv_fastslow fs1(.fastclk(CLOCK_50), .slowclk(sampler), .data(mod_wave), .d_out(actual_selected_modulation));
+domain_conv_fastslow fs2(.fastclk(CLOCK_50), .slowclk(sampler), .data(sel_wave), .d_out(actual_selected_signal));
+
+
+mod_select mod_s(.modulation_selector(modulation_selector),
+					.signal_select(signal_selector),
+					.sin(sin_out),
+					.cos(cos_out),
+					.saw(saw_out),
+					.square(squ_out),
+					.en(LFSR[0]),
+					.signal_mod(mod_wave),
+					.signal(sel_wave));
 
 
 ////////////////////////////////////////////////////////////////////
